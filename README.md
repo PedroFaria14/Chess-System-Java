@@ -1,0 +1,1 @@
+Este projeto é uma implementação completa do jogo de xadrez em Java, proporcionando uma experiência interativa e desafiadora. Desenvolvido com uma abordagem de programação orientada a objetos, o código fonte é modular e organizado, visando facilitar a compreensão e manutenção do sistema.
