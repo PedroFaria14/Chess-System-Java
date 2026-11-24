@@ -1,0 +1,36 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+spring:
+  application:
+    name: chess-studio
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:file:./data/chess;MODE=PostgreSQL;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DATABASE_USER:sa}
+    password: ${DATABASE_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  mvc:
+    problemdetails:
+      enabled: true
+chess:
+  engine:
+    path: ${STOCKFISH_PATH:}
+    timeout-seconds: 8
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,http://localhost:8080,http://localhost:8088}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

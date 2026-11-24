@@ -1,0 +1,61 @@
+<section class="page-heading">
+  <div><span class="eyebrow">O JOGO COMEÇA AQUI</span><h1>{{ store.game() ? 'Cada lance, uma possibilidade.' : 'Seu próximo grande lance.' }}</h1><p>Desconecte das distrações. Conecte-se ao jogo.</p></div>
+  @if (store.game()) { <button type="button" class="button primary" (click)="openNew()" [disabled]="store.busy()">＋ Nova partida</button> }
+</section>
+
+<div class="game-layout" [attr.aria-busy]="store.busy()">
+  <section class="board-column" aria-label="Área de jogo">
+    <div class="player-strip" [class.on-turn]="store.game()?.currentPlayer === topColor() && store.game()?.result === '*'">
+      <span class="avatar" [class.white-avatar]="topColor() === 'WHITE'">{{ player(topColor()).charAt(0).toUpperCase() }}</span>
+      <div class="player-info"><strong>{{ player(topColor()) }}</strong><small>{{ topColor() === 'WHITE' ? 'Peças brancas' : 'Peças pretas' }}<span class="captures">@for (p of capturedBy(topColor()); track $index) { <chess-piece [type]="p.type" [color]="p.color"/> }</span></small></div>
+      @if (store.game()?.currentPlayer === topColor() && store.game()?.result === '*') { <span class="turn-label">Sua vez</span> } @else { <span class="player-color">{{ topColor() === 'WHITE' ? '○' : '●' }}</span> }
+    </div>
+    <chess-board [fen]="store.displayedFen()" [flipped]="store.flipped()" [selected]="store.selected()" [legal]="store.legal()"
+      [interactive]="!!store.game() && !store.busy() && !store.computerTurn() && !store.reviewing() && store.game()?.result === '*'"
+      [hints]="preferences.hints()" [check]="!!store.game()?.check && !store.reviewing()" [turn]="store.game()?.currentPlayer ?? 'WHITE'"
+      [lastFrom]="store.lastMove()?.from ?? null" [lastTo]="store.lastMove()?.to ?? null"
+      (activate)="store.select($event)" (dropped)="drop($event)"/>
+    <div class="player-strip" [class.on-turn]="store.game()?.currentPlayer === bottomColor() && store.game()?.result === '*'">
+      <span class="avatar" [class.white-avatar]="bottomColor() === 'WHITE'">{{ player(bottomColor()).charAt(0).toUpperCase() }}</span>
+      <div class="player-info"><strong>{{ player(bottomColor()) }}</strong><small>{{ bottomColor() === 'WHITE' ? 'Peças brancas' : 'Peças pretas' }}<span class="captures">@for (p of capturedBy(bottomColor()); track $index) { <chess-piece [type]="p.type" [color]="p.color"/> }</span></small></div>
+      @if (store.game()?.currentPlayer === bottomColor() && store.game()?.result === '*') { <span class="turn-label">Sua vez</span> } @else { <span class="player-color">{{ bottomColor() === 'WHITE' ? '○' : '●' }}</span> }
+    </div>
+    <div class="board-toolbar"><span>{{ store.reviewing() ? '◷ Modo de revisão' : store.game()?.mode === 'COMPUTER' ? '◉ Stockfish · ' + difficulties[store.game()!.difficulty] : '◉ Dois jogadores · Sem relógio' }}</span><div><button type="button" class="icon-button" aria-label="Inverter tabuleiro" title="Inverter tabuleiro" (click)="store.flipped.set(!store.flipped())">⇅</button><button type="button" class="icon-button" aria-label="Alternar dicas de movimentos" title="Dicas de movimentos" [attr.aria-pressed]="preferences.hints()" (click)="preferences.hints.set(!preferences.hints())">◎</button><a class="icon-button" routerLink="/settings" aria-label="Preferências" title="Preferências">⚙</a></div></div>
+    <p class="board-help">Clique em uma peça e depois no destino. Você também pode arrastar ou usar as setas e Enter.</p>
+  </section>
+
+  <aside class="game-panel">
+    @if (!store.ready()) {
+      <div class="panel-content empty-state" role="status"><span class="loader"></span><h2>Preparando o tabuleiro…</h2><p>Carregando suas partidas.</p></div>
+    } @else if (!store.game()) {
+      <div class="panel-content setup-panel"><span class="section-icon">♟</span><span class="eyebrow">SEU PRÓXIMO DESAFIO</span><h2>O bom xadrez<br>aproxima.</h2><p>Convide alguém ou desafie o Stockfish. Escolha seu jogo.</p>
+        <game-setup (configured)="start($event)"/><small class="save-note">✓ Seu progresso é salvo a cada lance.</small>
+      </div>
+      <div class="panel-bottom"><span aria-hidden="true">✦</span><p><strong>Seu ritmo. Seu jogo.</strong><br>Sem contagem regressiva. Aproveite cada posição.</p></div>
+    } @else {
+      <div class="match-status" role="status" aria-live="polite"><span class="eyebrow">{{ store.game()?.result !== '*' ? 'PARTIDA ENCERRADA' : store.game()?.mode === 'COMPUTER' ? 'CONTRA O COMPUTADOR · ' + difficulties[store.game()!.difficulty] : 'PARTIDA LOCAL' }}</span><h2>{{ store.status() }}</h2><small>{{ store.thinking() ? 'Analisando a posição…' : store.busy() ? 'Salvando…' : store.selecting() ? 'Consultando movimentos…' : '✓ Progresso salvo automaticamente' }}</small></div>
+      @if (store.computerTurn() && !store.thinking() && !store.busy() && !store.reviewing()) { <button type="button" class="review-banner" (click)="store.playComputer()">↻ Tentar jogada do computador novamente</button> }
+      @if (store.reviewing()) { <button class="review-banner" type="button" (click)="store.review(null)">Voltar à posição atual →</button> }
+      <div class="panel-tabs"><span>Lances</span><span class="count-badge">{{ store.game()?.moves?.length ?? 0 }}</span><span class="notation-label">Notação algébrica</span></div>
+      <div class="move-list" aria-label="Histórico de lances">
+        @if (rows().length === 0) { <div class="empty-moves"><span aria-hidden="true">♙</span><p>Uma página em branco.<br><strong>Faça o primeiro lance.</strong></p></div> }
+        @for (row of rows(); track row.number) {
+          <div class="move-row"><span>{{ row.number }}.</span><button type="button" [class.current-move]="(store.reviewPly() ?? store.game()?.moves?.length) === row.white.ply" (click)="store.review(row.white.ply)" [attr.aria-label]="'Revisar lance ' + row.number + ' das brancas: ' + row.white.san">{{ row.white.san }}</button>
+          @if (row.black) { <button type="button" [class.current-move]="(store.reviewPly() ?? store.game()?.moves?.length) === row.black.ply" (click)="store.review(row.black.ply)" [attr.aria-label]="'Revisar lance ' + row.number + ' das pretas: ' + row.black.san">{{ row.black.san }}</button> }</div>
+        }
+      </div>
+      <div class="replay-controls"><button type="button" class="icon-button" aria-label="Posição inicial" (click)="store.review(0)" [disabled]="!store.game()?.moves?.length">|‹</button><button type="button" class="icon-button" aria-label="Lance anterior" (click)="navigate(-1)" [disabled]="store.reviewPly() === 0 || !store.game()?.moves?.length">‹</button><button type="button" class="icon-button" aria-label="Próximo lance" (click)="navigate(1)" [disabled]="!store.reviewing()">›</button><button type="button" class="icon-button" aria-label="Posição atual" (click)="store.review(null)" [disabled]="!store.reviewing()">›|</button></div>
+      <div class="match-actions">
+        @if (store.game()?.result === '*') {
+          <div class="two-buttons">@if (store.game()?.mode === 'LOCAL') { <button type="button" class="button secondary" (click)="confirm('draw-agreement')" [disabled]="store.busy() || store.reviewing()">½ Empate</button> }<button type="button" class="button secondary" (click)="confirm('resignation')" [disabled]="store.busy() || store.reviewing()">⚑ Desistir</button></div>
+          @if (store.game()?.canClaimDraw && !store.computerTurn()) { <button type="button" class="button secondary full" (click)="confirm('draw-claim')" [disabled]="store.busy() || store.reviewing()">Reivindicar empate</button> }
+        }
+        <div class="export-actions"><button type="button" (click)="store.exportPgn()" [disabled]="store.busy()">↓ Exportar PGN</button><button type="button" (click)="store.exportFen()">↓ FEN</button><button type="button" (click)="store.load(store.game()!.id)" [disabled]="store.busy()">↻ Atualizar</button></div>
+      </div>
+    }
+  </aside>
+</div>
+
+<dialog #newDialog class="modal"><span class="eyebrow">NOVAS POSSIBILIDADES</span><h2>Uma nova partida.</h2><p>A partida atual continuará salva no histórico.</p><game-setup prefix="new" [initial]="store.game()" (configured)="start($event, true)"/><button type="button" class="button secondary full" (click)="newDialog.close()">Cancelar</button>@if (store.error()) { <p class="inline-error" role="alert">{{ store.error() }}</p> }</dialog>
+<dialog #confirmDialog class="modal"><span class="eyebrow">CONFIRMAR AÇÃO</span><h2>{{ action === 'resignation' ? 'Desistir desta partida?' : action === 'draw-agreement' ? 'Os dois concordam com o empate?' : 'Reivindicar empate?' }}</h2><p>{{ action === 'resignation' ? (store.game()?.mode === 'COMPUTER' ? 'Você concede a vitória ao Stockfish. O resultado ficará salvo.' : 'O jogador da vez concede a vitória ao adversário. O resultado ficará salvo.') : 'Esta ação encerra a partida e salva o resultado no histórico.' }}</p><div class="dialog-actions"><button type="button" class="button secondary" (click)="confirmDialog.close()">Continuar jogando</button><button type="button" class="button primary" [disabled]="store.busy()" (click)="finish()">Confirmar</button></div>@if (store.error()) { <p class="inline-error" role="alert">{{ store.error() }}</p> }</dialog>
+<dialog #promotionDialog class="modal" (cancel)="store.promotion.set(null)"><span class="eyebrow">UM NOVO POTENCIAL</span><h2>Promova seu peão.</h2><p>Escolha a peça antes de concluir a jogada.</p><div class="promotion-options">@for (type of promotionTypes; track type) { <button type="button" [disabled]="store.busy()" (click)="store.promote(type)" [attr.aria-label]="pieceNames[type]"><chess-piece [type]="type" [color]="store.game()?.currentPlayer ?? 'WHITE'"/><span>{{ pieceNames[type] }}</span></button> }</div><button type="button" class="button secondary full" (click)="store.promotion.set(null)">Cancelar jogada</button>@if (store.error()) { <p class="inline-error" role="alert">{{ store.error() }}</p> }</dialog>

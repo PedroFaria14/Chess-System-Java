@@ -1,0 +1,87 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: chess_test
+          POSTGRES_USER: chess
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U chess -d chess_test"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Backend tests and package against PostgreSQL
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: jdbc:postgresql://localhost:5432/chess_test
+          DATABASE_USER: chess
+          DATABASE_PASSWORD: ci-only-password
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y stockfish
+          bash mvnw -B verify -Pstockfish
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend install and production build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm audit --omit=dev
+      - name: Browser tests (desktop and mobile)
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e -- --workers=2
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            backend/target/surefire-reports
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
+  containers:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start full stack
+        run: docker compose --env-file .env.example up -d --build --wait
+      - name: Smoke test
+        run: |
+          curl --fail http://localhost:8088/health
+          curl --fail http://localhost:8088/play
+          curl --fail http://localhost:8088/api/games
+      - name: Container logs
+        if: failure()
+        run: docker compose --env-file .env.example logs
+      - name: Stop containers
+        if: always()
+        run: docker compose --env-file .env.example down
